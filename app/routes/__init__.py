@@ -1,9 +1,9 @@
-from app.routes.activity_routes import activity_bp
-from app.routes.candidate_routes import candidate_bp
+from flask import Blueprint
 
-def register_routes(app):
-    """
-    將所有的 Blueprint 註冊到 Flask App
-    """
-    app.register_blueprint(activity_bp)
-    app.register_blueprint(candidate_bp)
+# 初始化各個 Blueprint
+main_bp = Blueprint('main', __name__)
+auth_bp = Blueprint('auth', __name__, url_prefix='/auth')
+draw_bp = Blueprint('draw', __name__, url_prefix='/draw')
+
+# 匯入各個路由模組以註冊路由
+from app.routes import main, auth, draw

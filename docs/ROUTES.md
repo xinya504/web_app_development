@@ -1,87 +1,73 @@
-# 路由與頁面設計文件 (ROUTES)
+# 路由與頁面設計 - 隨機抽號系統
+
+本文件根據系統架構與流程圖，定義所有的 Flask 路由、對應的視圖函式及 Jinja2 模板，為前後端實作提供依據。
 
 ## 1. 路由總覽表格
 
 | 功能 | HTTP 方法 | URL 路徑 | 對應模板 | 說明 |
-| --- | --- | --- | --- | --- |
-| 首頁 | GET | `/` | `index.html` | 顯示近期活動列表，並提供建立新活動的表單 |
-| 建立活動 | POST | `/activities` | — | 接收新活動名稱，存入 DB，完成後重導向至活動管理頁 |
-| 活動管理頁 | GET | `/activities/<int:activity_id>` | `activities/detail.html` | 顯示候選名單、抽獎結果，並包含「新增名單表單」與「選擇抽出人數與抽籤」 |
-| 新增名單 | POST | `/activities/<int:activity_id>/candidates` | — | 接收使用者輸入的多行名單，存入 DB，重導向回活動管理頁 |
-| 執行抽籤 | POST | `/activities/<int:activity_id>/draw` | `activities/draw_result.html` | 接收要抽出的人數參數，隨機選取未抽出的名單並更新 DB 狀態，渲染或重導向至結果展示頁 |
-| 重置名單 | POST | `/activities/<int:activity_id>/reset` | — | 將此活動下所有名單的 `is_drawn` 狀態設為 0，重導向回活動管理頁 |
-| 刪除活動 | POST | `/activities/<int:activity_id>/delete` | — | 刪除此活動與其所有名單，完成後重導向回首頁 |
+| :--- | :--- | :--- | :--- | :--- |
+| **首頁** | GET | `/` | `index.html` | 顯示網站介紹與抽籤選項入口 |
+| **註冊頁面** | GET | `/auth/register` | `auth/register.html` | 顯示註冊表單 |
+| **執行註冊** | POST | `/auth/register` | — | 接收註冊表單，存入 DB，重導向至登入頁 |
+| **登入頁面** | GET | `/auth/login` | `auth/login.html` | 顯示登入表單 |
+| **執行登入** | POST | `/auth/login` | — | 驗證帳密，設定 Session，重導向至首頁 |
+| **登出系統** | GET | `/auth/logout` | — | 清除 Session，重導向至首頁 |
+| **數字抽籤設定** | GET | `/draw/number` | `draw/setup_number.html` | 顯示數字範圍與抽出數量設定表單 |
+| **執行數字抽籤** | POST | `/draw/number` | — | 執行抽籤，存入紀錄，重導向至結果頁 |
+| **名單抽籤設定** | GET | `/draw/custom` | `draw/setup_custom.html` | 顯示自訂名單輸入表單（可選取已存名單） |
+| **執行名單抽籤** | POST | `/draw/custom` | — | 執行名單抽籤，存入紀錄，重導向至結果頁 |
+| **顯示抽籤結果** | GET | `/draw/result/<id>` | `draw/result.html` | 根據紀錄 ID 顯示結果 |
+| **歷史紀錄** | GET | `/draw/history` | `draw/history.html` | 列出登入使用者過去的抽籤紀錄 |
+| **自訂名單管理** | GET | `/draw/lists` | `draw/lists.html` | 列出已儲存的自訂名單 |
+| **新增自訂名單** | POST | `/draw/lists/new` | — | 從表單接收名單資料，存入 DB，重導向 |
+| **刪除自訂名單** | POST | `/draw/lists/<id>/delete`| — | 刪除自訂名單，重導向回管理頁 |
 
 ## 2. 每個路由的詳細說明
 
-### `GET /`
-- **處理邏輯**：呼叫 `Activity.get_all()` 取得目前所有的抽籤活動。
-- **輸出**：渲染 `index.html`，並將活動列表傳入給模板。
-- **錯誤處理**：無。
+### `main` Blueprint
+- **`/` (GET)**
+  - 輸入：無
+  - 處理邏輯：單純顯示首頁，判斷是否已登入以顯示不同導覽列。
+  - 輸出：渲染 `index.html`。
 
-### `POST /activities`
-- **輸入**：表單欄位 `name` (活動名稱)。
-- **處理邏輯**：驗證 `name` 不為空後，呼叫 `Activity.create(name)`。
-- **輸出**：重導向至 `/activities/<新產生的 id>`。
-- **錯誤處理**：若名稱空白，可透過 Flash message 提示，重導向回 `/`。
+### `auth` Blueprint
+- **`/auth/register` (POST)**
+  - 輸入：表單欄位 `username`, `password`, `confirm_password`。
+  - 處理邏輯：驗證密碼一致性，檢查帳號是否重複，密碼雜湊後呼叫 `User.create`。
+  - 輸出：成功重導至 `/auth/login`，失敗回傳帶有錯誤訊息的 `auth/register.html`。
+- **`/auth/login` (POST)**
+  - 輸入：表單欄位 `username`, `password`。
+  - 處理邏輯：呼叫 `User.get_by_username`，驗證密碼，成功則寫入 session。
+  - 輸出：成功重導至 `/`，失敗回傳帶有錯誤訊息的 `auth/login.html`。
 
-### `GET /activities/<int:activity_id>`
-- **輸入**：URL 參數 `activity_id`。
-- **處理邏輯**：
-  1. 呼叫 `Activity.get_by_id(activity_id)`。
-  2. 呼叫 `Candidate.get_undrawn_by_activity(activity_id)` 取得未抽出名單。
-  3. 呼叫 `Candidate.get_drawn_by_activity(activity_id)` 取得已抽出名單。
-- **輸出**：渲染 `activities/detail.html`。
-- **錯誤處理**：若活動不存在，回傳 404 Not Found。
-
-### `POST /activities/<int:activity_id>/candidates`
-- **輸入**：表單欄位 `candidate_names` (多行字串 textarea)。
-- **處理邏輯**：以換行符號切割字串、去除空白後，呼叫 `Candidate.create_many()` 批次建檔。
-- **輸出**：重導向回 `/activities/<activity_id>`。
-- **錯誤處理**：若沒有輸入任何有效文字，重導向回去並給予提示。
-
-### `POST /activities/<int:activity_id>/draw`
-- **輸入**：表單欄位 `draw_count` (預計抽出人數，預設為 1)。
-- **處理邏輯**：
-  1. 透過 `Candidate.get_undrawn_by_activity()` 取得未抽出清單。
-  2. 此處應在 Python 程式碼隨機打亂名單（`random.sample()`）取出相對應人數。
-  3. 將抽中者的 ID 透過 `Candidate.mark_as_drawn()` 標記為已中獎。
-- **輸出**：將中獎者名單與活動資訊傳遞到 `activities/draw_result.html` 給予動畫/清晰展示，畫面應包含按鈕可返回管理頁。
-- **錯誤處理**：若未抽出清單人數少於 `draw_count`，則全部抽出並給予提示。
-
-### `POST /activities/<int:activity_id>/reset`
-- **輸入**：無。
-- **處理邏輯**：呼叫 `Candidate.reset_drawn_status()`。
-- **輸出**：重導向回 `/activities/<activity_id>`。
-
-### `POST /activities/<int:activity_id>/delete`
-- **輸入**：無。
-- **處理邏輯**：呼叫 `Activity.delete()`。
-- **輸出**：重導向回 `/`。
-
----
+### `draw` Blueprint
+- **`/draw/number` (POST)**
+  - 輸入：表單欄位 `start`, `end`, `count`。
+  - 處理邏輯：執行亂數抽取，若已登入則呼叫 `DrawRecord.create` 儲存，取得 `record_id`。若未登入可能存入 session 暫存。
+  - 輸出：重導至 `/draw/result/<record_id>`。
+- **`/draw/custom` (POST)**
+  - 輸入：表單欄位 `items` (逗號分隔或多行文字), `count`。
+  - 處理邏輯：將字串轉為 list，執行亂數抽取，若已登入則呼叫 `DrawRecord.create` 儲存。
+  - 輸出：重導至 `/draw/result/<record_id>`。
+- **`/draw/result/<id>` (GET)**
+  - 輸入：URL 參數 `id`。
+  - 處理邏輯：呼叫 `DrawRecord.get_by_id` 取得結果。
+  - 輸出：渲染 `draw/result.html`。如果找不到紀錄，回傳 404 頁面。
 
 ## 3. Jinja2 模板清單
 
-所有的模板檔案會建立在 `app/templates/` 中。
+所有頁面預計都會繼承 `base.html`，以共用導覽列 (Navbar) 與頁尾 (Footer)。
 
-1. **`base.html`**
-   - 所有頁面的根模板
-   - 包含共通的 CSS 引用、標頭（Header）與頁尾（Footer）、Flash Message 顯示區域。
-
-2. **`index.html`**
-   - 繼承自 `base.html`
-   - 功能：展示活動清單以及建立活動視窗。
-
-3. **`activities/detail.html`**
-   - 繼承自 `base.html`
-   - 功能：活動詳情面板。左側或上方可貼上名單增加候補項目，右側或下方列出「抽出按鈕」、未中籤名單、已中籤名單。
-
-4. **`activities/draw_result.html`**
-   - 繼承自 `base.html`
-   - 功能：顯示抽出的驚喜結果，包含 CSS 放大/特效，確認結果後「返回活動列表」按鈕。
-
----
+- `base.html`：基底版型，引入 CSS/JS，定義 block content。
+- `index.html`：網站首頁，提供「數字抽號」與「名單抽號」入口按鈕。
+- `auth/register.html`：註冊表單。
+- `auth/login.html`：登入表單。
+- `draw/setup_number.html`：數字抽籤設定頁。
+- `draw/setup_custom.html`：自訂名單設定頁。
+- `draw/result.html`：顯示抽出結果（可搭配 JavaScript 動畫）。
+- `draw/history.html`：以表格形式列出過去抽籤紀錄。
+- `draw/lists.html`：列出並管理（新增/刪除）常用名單。
 
 ## 4. 路由骨架程式碼
-請參考 `app/routes/` 內的 `.py` 檔案。
+
+已在 `app/routes/` 下建立對應的 Python 檔案骨架。
