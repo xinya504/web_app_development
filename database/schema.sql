@@ -1,16 +1,25 @@
--- 建立 activities 資料表
-CREATE TABLE IF NOT EXISTS activities (
+CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
+    username TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- 建立 candidates 資料表
-CREATE TABLE IF NOT EXISTS candidates (
+CREATE TABLE IF NOT EXISTS custom_lists (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    activity_id INTEGER NOT NULL,
-    name TEXT NOT NULL,
-    is_drawn INTEGER DEFAULT 0,
+    user_id INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    items TEXT NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (activity_id) REFERENCES activities (id) ON DELETE CASCADE
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS draw_records (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    draw_type TEXT NOT NULL,
+    settings TEXT NOT NULL,
+    result TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
 );
